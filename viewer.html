@@ -14,14 +14,34 @@
       color: #222;
       background-color: #fafafa;
     }
-    ruby rt {
-      font-size: 0.55em;
+    h1.work-title {
+      font-size: 1.75rem;
+      margin-bottom: 1.8rem;
+      line-height: 1.4;
     }
-    .bouten {
+    .aozora-h2 {
+      font-size: 1.45rem;
+      margin: 2.2rem 0 1rem;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 0.3rem;
+    }
+    .aozora-h3 {
+      font-size: 1.2rem;
+      margin: 1.8rem 0 0.8rem;
+    }
+    .aozora-h4 {
+      font-size: 1.05rem;
+      margin: 1.4rem 0 0.6rem;
+    }
+    .aozora-bouten {
       text-emphasis: filled dot;
       -webkit-text-emphasis: filled dot;
       text-emphasis-position: over right;
       -webkit-text-emphasis-position: over right;
+    }
+    .aozora-note {
+      font-size: 0.85em;
+      color: #666;
     }
     .error {
       color: #b00020;
@@ -29,33 +49,9 @@
       padding: 1rem;
       border-radius: 6px;
     }
-.aozora-h2 {
-  font-size: 1.45rem;
-  margin: 2.2rem 0 1rem;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 0.3rem;
-}
-.aozora-h3 {
-  font-size: 1.2rem;
-  margin: 1.8rem 0 0.8rem;
-}
-.aozora-h4 {
-  font-size: 1.05rem;
-  margin: 1.4rem 0 0.6rem;
-}
-.aozora-bouten {
-  text-emphasis: filled dot;
-  -webkit-text-emphasis: filled dot;
-  text-emphasis-position: over right;
-  -webkit-text-emphasis-position: over right;
-}
-.aozora-note {
-  font-size: 0.85em;
-  color: #666;
-}
-ruby rt {
-  font-size: 0.55em;
-}
+    ruby rt {
+      font-size: 0.55em;
+    }
   </style>
 </head>
 <body>
@@ -63,155 +59,143 @@ ruby rt {
 
   <script>
     function escapeHtml(str) {
-      return str
+      return String(str)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
-/**
- * 青空文庫形式のテキストをHTMLに変換する関数
- * @param {string} rawText - 読み込んだ生テキスト（UTF-8）
- * @returns {{ html: string, title: string }}
- */
-function convertAozoraText(rawText) {
-  // 1. 改行コードを \n に統一
-  let text = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    /**
+     * 青空文庫形式のテキストをHTMLに変換する関数
+     * @param {string} rawText - 読み込んだ生テキスト（UTF-8）
+     * @returns {{ html: string, title: string }}
+     */
+    function convertAozoraText(rawText) {
+      let text = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  // 2. 先頭行をタイトルとして取得（空行を飛ばして最初の行を候補にする）
-  const lines = text.split("\n");
-  let title = "著作閲覧ビューア";
-  let titleIndex = -1;
+      const lines = text.split("\n");
+      let title = "著作閲覧ビューア";
+      let titleIndex = -1;
 
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed !== "" && !trimmed.startsWith("［＃") && !trimmed.startsWith("[#")) {
-      title = trimmed;
-      titleIndex = i;
-      break;
-    }
-  }
-
-  // タイトル行を本文から除きたい場合は以下を有効化（残したい場合はコメントアウトのまま）
-  if (titleIndex !== -1) {
-    lines[titleIndex] = "";
-  }
-  text = lines.join("\n");
-
-  // タグやHTMLの誤爆を防ぐための退避用配列
-  const tokens = [];
-  const keepToken = (htmlSnippet) => {
-    const id = `@@AOZORA_TOKEN_${tokens.length}@@`;
-    tokens.push(htmlSnippet);
-    return id;
-  };
-
-  // HTML特殊文字のエスケープ（青空文庫注記を処理する前に実行すると記号が崩れにくい）
-  const escapeHtml = (str) =>
-    str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-
-  // 3. 「［＃「対象」は中見出し］」「［＃「対象」は小見出し］」「［＃「対象」は大見出し］」
-  text = text.replace(/(.+?)［＃「\1」は大見出し］/g, (_, heading) =>
-    keepToken(`<h2 class="aozora-h2">${escapeHtml(heading)}</h2>`)
-  );
-  text = text.replace(/(.+?)［＃「\1」は中見出し］/g, (_, heading) =>
-    keepToken(`<h3 class="aozora-h3">${escapeHtml(heading)}</h3>`)
-  );
-  text = text.replace(/(.+?)［＃「\1」は小見出し］/g, (_, heading) =>
-    keepToken(`<h4 class="aozora-h4">${escapeHtml(heading)}</h4>`)
-  );
-
-  // 4. 「［＃「対象」は太字］」／「[#「対象」は太字]」
-  text = text.replace(/(.+?)［＃「\1」は太字］/g, (_, boldText) =>
-    keepToken(`<strong>${escapeHtml(boldText)}</strong>`)
-  );
-  text = text.replace(/(.+?)\[#「\1」は太字\]/g, (_, boldText) =>
-    keepToken(`<strong>${escapeHtml(boldText)}</strong>`)
-  );
-
-  // 5. 「対象［＃「対象」に傍点］」／「対象[#「対象」に傍点]」
-  text = text.replace(/(.+?)［＃「\1」に傍点］/g, (_, boutenText) =>
-    keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
-  );
-  text = text.replace(/(.+?)\[#「\1」に傍点\]/g, (_, boutenText) =>
-    keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
-  );
-
-  // 6. 底本注記：「［＃「〜」は底本では「〜」］」
-  text = text.replace(/［＃(.+?)］/g, (match, noteContent) => {
-    // 字下げ指定は段落単位で処理するため残す
-    if (/^[０-９0-9]+字下げ$/.test(noteContent.trim())) {
-      return match;
-    }
-    return keepToken(`<span class="aozora-note">［＃${escapeHtml(noteContent)}］</span>`);
-  });
-
-  // 7. ルビ変換（縦線付きルビ → 漢字直後ルビの順）
-  // 例：｜融《と》けほぐれて → <ruby>融<rt>と</rt></ruby>けほぐれて
-  text = text.replace(/｜([^｜\n《》]+)《([^《》\n]+)》/g, (_, base, ruby) =>
-    keepToken(`<ruby>${escapeHtml(base)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
-  );
-
-  // 例：暢《の》びのびと → <ruby>暢<rt>の</rt></ruby>びのびと
-  text = text.replace(/([一-龠々ヶ]+)《([^《》\n]+)》/g, (_, kanji, ruby) =>
-    keepToken(`<ruby>${escapeHtml(kanji)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
-  );
-
-  // 二重山括弧の傍点記法（《《文字》》）にも対応
-  text = text.replace(/《《([^》\n]+)》》/g, (_, boutenText) =>
-    keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
-  );
-
-  // 8. 段落ごとに分割し、「［＃１字下げ］」などを反映
-  const blocks = text.split(/\n{2,}/);
-  const htmlBlocks = blocks.map((rawBlock) => {
-    let block = rawBlock.trim();
-    if (!block) return "";
-
-    // すでにブロック要素（h2, h3, h4）になっている場合
-    if (/^@@AOZORA_TOKEN_\d+@@$/.test(block)) {
-      const idx = Number(block.match(/\d+/)[0]);
-      if (tokens[idx] && /^<h[2-4]/.test(tokens[idx])) {
-        // 行頭に ［＃１字下げ］ が付いている見出しがあればクラスを付与
-        const hasIndent = rawBlock.includes("［＃１字下げ］") || rawBlock.includes("［＃1字下げ］");
-        return hasIndent
-          ? tokens[idx].replace(/^<(h[2-4])/, '<$1 class="$1 indent-1"')
-          : tokens[idx];
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed !== "" && !trimmed.startsWith("［＃") && !trimmed.startsWith("[#")) {
+          title = trimmed;
+          titleIndex = i;
+          break;
+        }
       }
+
+      if (titleIndex !== -1) {
+        lines[titleIndex] = "";
+      }
+      text = lines.join("\n");
+
+      const tokens = [];
+      const keepToken = (htmlSnippet) => {
+        const id = `@@AOZORA_TOKEN_${tokens.length}@@`;
+        tokens.push(htmlSnippet);
+        return id;
+      };
+
+      // 見出し変換
+      text = text.replace(/(.+?)［＃「\1」は大見出し］/g, (_, heading) =>
+        keepToken(`<h2 class="aozora-h2">${escapeHtml(heading)}</h2>`)
+      );
+      text = text.replace(/(.+?)［＃「\1」は中見出し］/g, (_, heading) =>
+        keepToken(`<h3 class="aozora-h3">${escapeHtml(heading)}</h3>`)
+      );
+      text = text.replace(/(.+?)［＃「\1」は小見出し］/g, (_, heading) =>
+        keepToken(`<h4 class="aozora-h4">${escapeHtml(heading)}</h4>`)
+      );
+
+      // 太字変換
+      text = text.replace(/(.+?)［＃「\1」は太字］/g, (_, boldText) =>
+        keepToken(`<strong>${escapeHtml(boldText)}</strong>`)
+      );
+      text = text.replace(/(.+?)\[#「\1」は太字\]/g, (_, boldText) =>
+        keepToken(`<strong>${escapeHtml(boldText)}</strong>`)
+      );
+
+      // 傍点変換
+      text = text.replace(/(.+?)［＃「\1」に傍点］/g, (_, boutenText) =>
+        keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
+      );
+      text = text.replace(/(.+?)\[#「\1」に傍点\]/g, (_, boutenText) =>
+        keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
+      );
+
+      // その他の［＃...］注記（字下げ以外）
+      text = text.replace(/［＃(.+?)］/g, (match, noteContent) => {
+        if (/^[０-９0-9]+字下げ$/.test(noteContent.trim())) {
+          return match;
+        }
+        return keepToken(`<span class="aozora-note">［＃${escapeHtml(noteContent)}］</span>`);
+      });
+
+      // ルビ変換（縦線付き → 漢字直後）
+      text = text.replace(/｜([^｜\n《》]+)《([^《》\n]+)》/g, (_, base, ruby) =>
+        keepToken(`<ruby>${escapeHtml(base)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
+      );
+      text = text.replace(/([一-龠々ヶ]+)《([^《》\n]+)》/g, (_, kanji, ruby) =>
+        keepToken(`<ruby>${escapeHtml(kanji)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
+      );
+
+      // 二重山括弧の傍点
+      text = text.replace(/《《([^》\n]+)》》/g, (_, boutenText) =>
+        keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
+      );
+
+      // 段落分割と字下げ反映
+      const blocks = text.split(/\n{2,}/);
+      const htmlBlocks = blocks.map((rawBlock) => {
+        let block = rawBlock.trim();
+        if (!block) return "";
+
+        if (/^@@AOZORA_TOKEN_\d+@@$/.test(block)) {
+          const idx = Number(block.match(/\d+/)[0]);
+          if (tokens[idx] && /^<h[2-4]/.test(tokens[idx])) {
+            const hasIndent = rawBlock.includes("［＃１字下げ］") || rawBlock.includes("［＃1字下げ］");
+            return hasIndent
+              ? tokens[idx].replace(/^<(h[2-4])/, '<$1 class="indent-1"')
+              : tokens[idx];
+          }
+        }
+
+        let indentLevel = 0;
+        block = block.replace(/［＃([０-９0-9]+)字下げ］/g, (_, numStr) => {
+          const halfNum = numStr.replace(/[０-９]/g, (d) =>
+            String.fromCharCode(d.charCodeAt(0) - 0xfee0)
+          );
+          indentLevel = Math.max(indentLevel, parseInt(halfNum, 10) || 0);
+          return "";
+        });
+
+        let safeBlock = escapeHtml(block);
+        safeBlock = safeBlock.replace(/@@AOZORA_TOKEN_(\d+)@@/g, (_, i) => tokens[Number(i)] ?? "");
+        safeBlock = safeBlock.replace(/\n/g, "<br>");
+
+        const indentStyle = indentLevel > 0 ? ` style="padding-left: ${indentLevel}em;"` : "";
+        return `<p${indentStyle}>${safeBlock}</p>`;
+      });
+
+      let finalHtml = htmlBlocks.filter(Boolean).join("\n");
+      finalHtml = finalHtml.replace(/@@AOZORA_TOKEN_(\d+)@@/g, (_, i) => tokens[Number(i)] ?? "");
+
+      return { html: finalHtml, title };
     }
 
-    // 段落内の「［＃１字下げ］」などを検出
-    let indentLevel = 0;
-    block = block.replace(/［＃([０-９0-9]+)字下げ］/g, (_, numStr) => {
-      const halfNum = numStr.replace(/[０-９]/g, (d) =>
-        String.fromCharCode(d.charCodeAt(0) - 0xfee0)
-      );
-      indentLevel = Math.max(indentLevel, parseInt(halfNum, 10) || 0);
-      return "";
-    });
+    async function loadWork() {
+      const contentEl = document.getElementById("content");
+      const params = new URLSearchParams(window.location.search);
+      const file = params.get("file");
 
-    // 残りの文字をエスケープしつつ、すでに作られたトークンは活かす
-    // （一度全体をエスケープしてからトークンを戻す方式）
-    let safeBlock = escapeHtml(block);
-    safeBlock = safeBlock.replace(/@@AOZORA_TOKEN_(\d+)@@/g, (_, i) => tokens[Number(i)] ?? "");
-    safeBlock = safeBlock.replace(/\n/g, "<br>");
+      if (!file) {
+        contentEl.innerHTML = '<p class="error">表示する作品が指定されていません（URLの末尾に <code>?file=texts/作品名.txt</code> を付けてください）。</p>';
+        return;
+      }
 
-    const indentClass = indentLevel > 0 ? ` style="padding-left: ${indentLevel}em;"` : "";
-    return `<p${indentClass}>${safeBlock}</p>`;
-  });
-
-  // 9. 段落結合後に、もし見出しトークン内のエスケープが残っていた場合の最終復元
-  let finalHtml = htmlBlocks.filter(Boolean).join("\n");
-  finalHtml = finalHtml.replace(/@@AOZORA_TOKEN_(\d+)@@/g, (_, i) => tokens[Number(i)] ?? "");
-
-  return { html: finalHtml, title };
-}
-
-      // パストラバーサル（../ など）を簡易的に防止
       if (file.includes("..")) {
         contentEl.innerHTML = '<p class="error">不正なファイル指定です。</p>';
         return;
@@ -223,7 +207,10 @@ function convertAozoraText(rawText) {
           throw new Error("ファイルが見つかりませんでした");
         }
         const rawText = await response.text();
-        contentEl.innerHTML = convertAozoraToHtml(rawText);
+        const result = convertAozoraText(rawText);
+
+        document.title = result.title;
+        contentEl.innerHTML = `<h1 class="work-title">${escapeHtml(result.title)}</h1>\n${result.html}`;
       } catch (err) {
         contentEl.innerHTML = `<p class="error">テキストの読み込みに失敗しました: ${escapeHtml(err.message)}</p>`;
       }
