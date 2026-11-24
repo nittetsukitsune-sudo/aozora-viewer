@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>著作閲覧ビューア</title>
+  <style>
+    body {
+      font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+      line-height: 1.9;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1.25rem;
+      color: #222;
+      background-color: #fafafa;
+    }
+    ruby rt {
+      font-size: 0.55em;
+    }
+    .bouten {
+      text-emphasis: filled dot;
+      -webkit-text-emphasis: filled dot;
+      text-emphasis-position: over right;
+      -webkit-text-emphasis-position: over right;
+    }
+    .error {
+      color: #b00020;
+      background: #fdecea;
+      padding: 1rem;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main id="content">読み込み中...</main>
+
+  <script>
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    // 青空文庫形式の主な記法を変換する関数
+    function convertAozoraToHtml(rawText) {
+      // 改行コードを統一
+      let text = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      text = escapeHtml(text);
+
+      // 1. [#「○○」は太字] 形式
+      text = text.replace(/\[#「(.+?)」は太字\]/g, "<strong>$1</strong>");
+
+      // 2. [#「○○」に傍点] 形式
+      text = text.replace(/\[#「(.+?)」に傍点\]/g, '<span class="bouten">$1</span>');
+
+      // 3. 二重山括弧の傍点 《《○○》》
+      text = text.replace(/《《(.+?)》》/g, '<span class="bouten">$1</span>');
+
+      // 4. 縦線付きルビ ｜対象《ルビ》
+      text = text.replace(/｜([^｜\n《》]+)《([^《》\n]+)》/g, "<ruby>$1<rt>$2</rt></ruby>");
+
+      // 5. 漢字の直後のルビ 漢字《ルビ》
+      text = text.replace(/([一-龠々ヶ]+)《([^《》\n]+)》/g, "<ruby>$1<rt>$2</rt></ruby>");
+
+      // 6. 段落（空行区切り）と改行の処理
+      const paragraphs = text.split(/\n{2,}/).map((block) => {
+        const withBr = block.trim().replace(/\n/g, "<br>");
+        return withBr ? `<p>${withBr}</p>` : "";
+      });
+
+      return paragraphs.join("\n");
+    }
+
+    async function loadWork() {
+      const contentEl = document.getElementById("content");
+      const params = new URLSearchParams(window.location.search);
+      const file = params.get("file");
+
+      if (!file) {
+        contentEl.innerHTML = '<p class="error">表示する作品が指定されていません（URLの末尾に <code>?file=texts/作品名.txt</code> を付けてください）。</p>';
+        return;
+      }
+
+      // パストラバーサル（../ など）を簡易的に防止
+      if (file.includes("..")) {
+        contentEl.innerHTML = '<p class="error">不正なファイル指定です。</p>';
+        return;
+      }
+
+      try {
+        const response = await fetch(file, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("ファイルが見つかりませんでした");
+        }
+        const rawText = await response.text();
+        contentEl.innerHTML = convertAozoraToHtml(rawText);
+      } catch (err) {
+        contentEl.innerHTML = `<p class="error">テキストの読み込みに失敗しました: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    loadWork();
+  </script>
+</body>
+</html>
