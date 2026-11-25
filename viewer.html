@@ -38,11 +38,10 @@
     .aozora-h2 {
       font-size: 1.45rem;
       font-weight: 700;
-      margin: 2.2rem 0 1rem;
+      margin: 1.8rem 0 0.8rem;
       border-bottom: 1px solid #ddd;
       padding-bottom: 0.3rem;
     }
-    /* 後ろにテキストが続く大見出し（改行しない） */
     .aozora-h2-inline {
       font-size: 1.4rem;
       font-weight: 700;
@@ -50,12 +49,12 @@
     .aozora-h3 {
       font-size: 1.2rem;
       font-weight: 700;
-      margin: 1.8rem 0 0.8rem;
+      margin: 1.4rem 0 0.6rem;
     }
     .aozora-h4 {
       font-size: 1.05rem;
       font-weight: 700;
-      margin: 1.4rem 0 0.6rem;
+      margin: 1.2rem 0 0.5rem;
     }
     .aozora-h4-inline {
       font-size: 1.05rem;
@@ -79,6 +78,17 @@
     .aozora-large {
       font-size: 1.18em;
     }
+    .aozora-sup {
+      font-size: 0.72em;
+      vertical-align: super;
+      line-height: 0;
+    }
+    .aozora-gyoumigi {
+      font-size: 0.75em;
+      vertical-align: super;
+      color: #444;
+      margin: 0 0.1em;
+    }
     .aozora-italic {
       font-style: italic;
     }
@@ -86,13 +96,15 @@
       text-align: right;
       display: block;
     }
-    .aozora-indent-block {
-      margin: 0.8rem 0;
+    .aozora-keigakomi {
+      border: 1px solid #666;
+      background-color: #fff;
+      padding: 0.9rem 1.1rem;
+      margin: 1.2rem 0;
+      border-radius: 3px;
     }
-    .aozora-indent-block p,
     p.aozora-p {
       margin: 0.45em 0;
-      /* 連続する全角・半角スペース（図式・表組表現など）を保持 */
       white-space: pre-wrap;
     }
     .aozora-note {
@@ -133,16 +145,10 @@
       );
     }
 
-    /**
-     * 青空文庫形式のテキストをHTMLに変換する関数
-     * @param {string} rawText - 読み込んだ生テキスト（UTF-8）
-     * @returns {{ html: string, bottomHtml: string, title: string }}
-     */
     function convertAozoraText(rawText) {
-      // 1. 改行コードを \n に統一
       let text = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-      // 2. 先頭の非空・非注記行をタイトルとして取得
+      // 1. 先頭の非空・非注記行をタイトルとして取得
       const lines = text.split("\n");
       let title = "著作閲覧ビューア";
       let titleIndex = -1;
@@ -160,7 +166,7 @@
         lines.splice(titleIndex, 1);
       }
 
-      // 3. 末尾の「底本：」以降を分離（底本情報の前に横棒を引くため）
+      // 2. 末尾の「底本：」以降を分離
       let bottomStartIndex = -1;
       for (let i = lines.length - 1; i >= 0; i--) {
         const t = lines[i].replace(/^[\s\u3000]+/, "");
@@ -178,7 +184,6 @@
 
       text = lines.join("\n");
 
-      // トークン退避機構（HTMLタグの誤爆・二重エスケープ防止）
       const tokens = [];
       const keepToken = (htmlSnippet) => {
         const id = `@@AOZORA_TOKEN_${tokens.length}@@`;
@@ -188,52 +193,50 @@
       const restoreTokens = (str) =>
         str.replace(/@@AOZORA_TOKEN_(\d+)@@/g, (_, i) => tokens[Number(i)] ?? "");
 
-      // インライン要素（ルビ・傍点・太字・斜体・文字サイズ・見出し）を変換するヘルパー
+      // インライン変換（同一行・同一段落内に複数あってもすべて変換）
       const parseInline = (rawLine) => {
         let s = rawLine;
 
-        // 縦中横の指定は横書き時は無視（例：12［＃「12」は縦中横］ → 12）
+        // 縦中横の指定・終了タグは横書きでは無視
         s = s.replace(/［＃「[^」]+」は縦中横］/g, "");
+        s = s.replace(/［＃縦中横］/g, "");
+        s = s.replace(/［＃縦中横終わり］/g, "");
 
-        // ルビ変換を先に処理してトークン化（見出しや太字の中にルビがあっても壊れないようにするため）
-        // 縦線付きルビ：｜対象《ルビ》
+        // ルビ変換（縦線付き → 漢字直後）
         s = s.replace(/｜([^｜\n《》]+)《([^《》\n]+)》/g, (_, base, ruby) =>
           keepToken(`<ruby>${escapeHtml(base)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
         );
-        // 漢字直後のルビ：漢字《ルビ》
         s = s.replace(/([一-龠々ヶ]+)《([^《》\n]+)》/g, (_, kanji, ruby) =>
           keepToken(`<ruby>${escapeHtml(kanji)}<rt>${escapeHtml(ruby)}</rt></ruby>`)
         );
 
         // 範囲指定のインライン注記
-        // ［＃小見出し］...［＃小見出し終わり］
+        s = s.replace(/［＃行右小書き］([\s\S]*?)［＃行右小書き終わり］/g, (_, inner) =>
+          keepToken(`<span class="aozora-gyoumigi">${parseInline(inner)}</span>`)
+        );
         s = s.replace(/［＃小見出し］([\s\S]*?)［＃小見出し終わり］/g, (_, inner) =>
           keepToken(`<span class="aozora-h4-inline">${parseInline(inner)}</span>`)
         );
-        // ［＃太字］...［＃太字終わり］
         s = s.replace(/［＃太字］([\s\S]*?)［＃太字終わり］/g, (_, inner) =>
           keepToken(`<strong>${parseInline(inner)}</strong>`)
         );
-        // ［＃斜体］...［＃斜体終わり］
         s = s.replace(/［＃斜体］([\s\S]*?)［＃斜体終わり］/g, (_, inner) =>
           keepToken(`<span class="aozora-italic">${parseInline(inner)}</span>`)
         );
-        // ［＃１段階小さな文字］...［＃小さな文字終わり］
         s = s.replace(/［＃[１1]段階小さな文字］([\s\S]*?)［＃小さな文字終わり］/g, (_, inner) =>
           keepToken(`<span class="aozora-small">${parseInline(inner)}</span>`)
         );
-        // ［＃１段階大きな文字］...［＃大きな文字終わり］
         s = s.replace(/［＃[１1]段階大きな文字］([\s\S]*?)［＃大きな文字終わり］/g, (_, inner) =>
           keepToken(`<span class="aozora-large">${parseInline(inner)}</span>`)
         );
 
-        // 直前語句指定の注記（ルビトークンが含まれる場合も考慮）
-        const replaceTargetNote = (str, noteSuffixRegex, wrapperFn) => {
-          return str.replace(noteSuffixRegex, (full, prefix, targetText) => {
-            // 直前の文字列末尾が targetText（またはトークン展開後に一致）なら置換
-            if (prefix.endsWith(targetText)) {
-              const before = prefix.slice(0, prefix.length - targetText.length);
-              return before + keepToken(wrapperFn(escapeHtml(targetText)));
+        // 直前語句指定の注記（同一行内の複数出現に対応するため、［＃...］の直前語句を個別に置換）
+        const replaceEachTarget = (str, suffixPattern, wrapperFn) => {
+          const regex = new RegExp(`([^」\\n]+?)${suffixPattern}`, "g");
+          return str.replace(regex, (full, candidate, target) => {
+            if (candidate.endsWith(target)) {
+              const head = candidate.slice(0, candidate.length - target.length);
+              return head + keepToken(wrapperFn(escapeHtml(target)));
             }
             return full;
           });
@@ -254,60 +257,98 @@
         });
 
         // 中見出し・小見出し
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は中見出し］/g, (t) => `<h3 class="aozora-h3">${t}</h3>`);
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は小見出し］/g, (t) => `<span class="aozora-h4-inline">${t}</span>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は中見出し］", (t) => `<h3 class="aozora-h3">${t}</h3>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は小見出し］", (t) => `<span class="aozora-h4-inline">${t}</span>`);
 
-        // 太字（全角・半角）
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は太字］/g, (t) => `<strong>${t}</strong>`);
-        s = replaceTargetNote(s, /^(.*?)\[#「([^」]+)」は太字\]/g, (t) => `<strong>${t}</strong>`);
+        // 太字・斜体・上付き小文字・文字サイズ
+        s = replaceEachTarget(s, "［＃「([^」]+)」は太字］", (t) => `<strong>${t}</strong>`);
+        s = replaceEachTarget(s, "\\[#「([^」]+)」は太字\\]", (t) => `<strong>${t}</strong>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は斜体］", (t) => `<span class="aozora-italic">${t}</span>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は上付き小文字］", (t) => `<sup class="aozora-sup">${t}</sup>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は[１1]段階小さな文字］", (t) => `<span class="aozora-small">${t}</span>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は[１1]段階大きな文字］", (t) => `<span class="aozora-large">${t}</span>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」は行右小書き］", (t) => `<span class="aozora-gyoumigi">${t}</span>`);
 
-        // 斜体
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は斜体］/g, (t) => `<span class="aozora-italic">${t}</span>`);
-
-        // １段階小さな文字・大きな文字
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は[１1]段階小さな文字］/g, (t) => `<span class="aozora-small">${t}</span>`);
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」は[１1]段階大きな文字］/g, (t) => `<span class="aozora-large">${t}</span>`);
-
-        // 傍点・丸傍点（全角・半角）
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」に丸傍点］/g, (t) => `<span class="aozora-maru-bouten">${t}</span>`);
-        s = replaceTargetNote(s, /^(.*?)［＃「([^」]+)」に傍点］/g, (t) => `<span class="aozora-bouten">${t}</span>`);
-        s = replaceTargetNote(s, /^(.*?)\[#「([^」]+)」に傍点\]/g, (t) => `<span class="aozora-bouten">${t}</span>`);
+        // 傍点・丸傍点
+        s = replaceEachTarget(s, "［＃「([^」]+)」に丸傍点］", (t) => `<span class="aozora-maru-bouten">${t}</span>`);
+        s = replaceEachTarget(s, "［＃「([^」]+)」に傍点］", (t) => `<span class="aozora-bouten">${t}</span>`);
+        s = replaceEachTarget(s, "\\[#「([^」]+)」に傍点\\]", (t) => `<span class="aozora-bouten">${t}</span>`);
 
         // 二重山括弧の傍点 《《...》》
         s = s.replace(/《《([^》\n]+)》》/g, (_, boutenText) =>
           keepToken(`<span class="aozora-bouten">${escapeHtml(boutenText)}</span>`)
         );
 
-        // 残った底本注記など（例：［＃「〜」は底本では「〜」］）
+        // その他の［＃...］注記
         s = s.replace(/［＃([^］]+)］/g, (_, noteContent) =>
           keepToken(`<span class="aozora-note">［＃${escapeHtml(noteContent)}］</span>`)
         );
 
-        // プレーンテキスト部分をエスケープし、トークンを復元
         return restoreTokens(escapeHtml(s));
       };
 
-      // 4. 行単位でブロック構造（ここから○字下げ・ここから小さな文字・地付き・段落）を解析
+      // 3. 行単位でブロック構造（字下げ・折り返し字下げ・地付き・罫囲み・小さな文字）を解析
       const bodyLines = text.split("\n");
       const outputHtml = [];
       let blockIndent = 0;
+      let foldIndent = null; // 折り返し字下げの文字数
+      let isFirstLineInIndentBlock = false;
       let blockSmall = false;
+      let inKeigakomi = false;
+      let keigakomiLines = [];
 
       for (let i = 0; i < bodyLines.length; i++) {
-        // ※重要：行頭の全角スペース（ ）は字下げとして残すため、\r や \n のみ除去する
         let line = bodyLines[i].replace(/[\r\n]/g, "");
         const trimmedControl = line.replace(/^[\s\u3000]+|[\s\u3000]+$/g, "");
 
-        // ブロック開始・終了タグのみの行を処理
+        // 罫囲みの開始・終了
+        if (trimmedControl === "［＃ここから罫囲み］") {
+          inKeigakomi = true;
+          keigakomiLines = [];
+          continue;
+        }
+        if (trimmedControl === "［＃ここで罫囲み終わり］") {
+          inKeigakomi = false;
+          const innerHtml = keigakomiLines
+            .map((kl) => `<p class="aozora-p">${parseInline(kl)}</p>`)
+            .join("\n");
+          outputHtml.push(`<div class="aozora-keigakomi">${innerHtml}</div>`);
+          keigakomiLines = [];
+          continue;
+        }
+        if (inKeigakomi) {
+          if (trimmedControl !== "") {
+            keigakomiLines.push(line);
+          }
+          continue;
+        }
+
+        // 字下げ開始（通常字下げ／折り返し字下げ併用）
+        const foldIndentMatch = trimmedControl.match(
+          /^［＃ここから([０-９0-9]+)字下げ、折り返して([０-９0-9]+)字下げ］$/
+        );
+        if (foldIndentMatch) {
+          blockIndent = parseInt(toHalfWidthDigits(foldIndentMatch[1]), 10) || 0;
+          foldIndent = parseInt(toHalfWidthDigits(foldIndentMatch[2]), 10) || 0;
+          isFirstLineInIndentBlock = true;
+          continue;
+        }
+
         const indentStartMatch = trimmedControl.match(/^［＃ここから([０-９0-9]+)字下げ］$/);
         if (indentStartMatch) {
           blockIndent = parseInt(toHalfWidthDigits(indentStartMatch[1]), 10) || 0;
+          foldIndent = null;
+          isFirstLineInIndentBlock = true;
           continue;
         }
+
         if (trimmedControl === "［＃ここで字下げ終わり］") {
           blockIndent = 0;
+          foldIndent = null;
+          isFirstLineInIndentBlock = false;
           continue;
         }
+
         if (/^［＃ここから[１1]段階小さな文字］$/.test(trimmedControl)) {
           blockSmall = true;
           continue;
@@ -317,19 +358,27 @@
           continue;
         }
 
-        // 空行は余白としてスキップ（連続空行の過剰な広がりを防ぐ）
+        // 空行はスキップ
         if (trimmedControl === "") {
           continue;
         }
 
-        // 行頭のインライン字下げ（例：［＃１字下げ］）や［＃地付き］をチェック
+        // 行頭のインライン字下げ・地から○字上げ・地付き
         let lineIndent = blockIndent;
         let isChitsuki = false;
+        let chitsukiOffset = 0;
 
         line = line.replace(/［＃([０-９0-9]+)字下げ］/g, (_, numStr) => {
           lineIndent += parseInt(toHalfWidthDigits(numStr), 10) || 0;
           return "";
         });
+
+        const chitsukiAgeMatch = line.match(/［＃地から([０-９0-9]+)字上げ］/);
+        if (chitsukiAgeMatch) {
+          isChitsuki = true;
+          chitsukiOffset = parseInt(toHalfWidthDigits(chitsukiAgeMatch[1]), 10) || 0;
+          line = line.replace(/［＃地から[０-９0-9]+字上げ］/g, "");
+        }
 
         if (line.includes("［＃地付き］")) {
           isChitsuki = true;
@@ -338,7 +387,7 @@
 
         const renderedLine = parseInline(line);
 
-        // 単独のブロック見出し（<h3>）になった場合
+        // ブロック見出し（<h3>など）が単独で生成された場合
         if (/^<h[2-4]\b[^>]*>[\s\S]*<\/h[2-4]>$/.test(renderedLine)) {
           const styleAttr = lineIndent > 0 ? ` style="padding-left: ${lineIndent}em;"` : "";
           outputHtml.push(renderedLine.replace(/^<(h[2-4])/, `<$1${styleAttr}`));
@@ -349,11 +398,25 @@
         if (blockSmall) classes.push("aozora-small");
         if (isChitsuki) classes.push("aozora-chitsuki");
 
-        const styleAttr = !isChitsuki && lineIndent > 0 ? ` style="padding-left: ${lineIndent}em;"` : "";
+        const styles = [];
+        if (isChitsuki) {
+          if (chitsukiOffset > 0) {
+            styles.push(`margin-right: ${chitsukiOffset}em;`);
+          }
+        } else if (foldIndent !== null && blockIndent > 0) {
+          // 折り返し字下げ：全体の左余白を折り返し字数にし、1行目だけ差分で左へ戻す
+          const diff = blockIndent - foldIndent;
+          styles.push(`padding-left: ${foldIndent}em;`);
+          styles.push(`text-indent: ${diff}em;`);
+          isFirstLineInIndentBlock = false;
+        } else if (lineIndent > 0) {
+          styles.push(`padding-left: ${lineIndent}em;`);
+        }
+
+        const styleAttr = styles.length > 0 ? ` style="${styles.join(" ")}"` : "";
         outputHtml.push(`<p class="${classes.join(" ")}"${styleAttr}>${renderedLine}</p>`);
       }
 
-      // 底本情報の変換
       const bottomHtml = bottomLines
         .map((l) => l.replace(/[\r\n]/g, ""))
         .filter((l) => l.replace(/^[\s\u3000]+|[\s\u3000]+$/g, "") !== "")
